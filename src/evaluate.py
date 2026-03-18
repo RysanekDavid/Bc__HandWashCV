@@ -32,8 +32,11 @@ def _get_detector_function(detector_name: str):
     elif detector_name == "mediapipe":
         from mediapipe_detector import detect_wash_events
         return detect_wash_events
+    elif detector_name == "soap_trigger":
+        from soap_trigger_detector import detect_wash_events
+        return detect_wash_events
     else:
-        raise ValueError(f"Unknown detector: {detector_name}. Use 'baseline' or 'mediapipe'.")
+        raise ValueError(f"Unknown detector: {detector_name}. Use 'baseline', 'mediapipe', or 'soap_trigger'.")
 
 def calculate_iou(start1, end1, start2, end2):
     """Calculate temporal Intersection over Union for two segments."""
@@ -44,10 +47,21 @@ def calculate_iou(start1, end1, start2, end2):
     union = (end1 - start1) + (end2 - start2) - intersection
     return intersection / union if union > 0 else 0
 
-def evaluate_performance(iou_threshold=0.1, detector_name="baseline"):
+def evaluate_performance(iou_threshold=0.1, detector_name="baseline", params=None):
     detect_wash_events = _get_detector_function(detector_name)
-    roi = load_roi(DEFAULT_ROI_PATH)
-    params = DetectionParams()
+    roi_data = load_roi(DEFAULT_ROI_PATH)
+    if params is None:
+        params = DetectionParams()
+
+    # Separate soap zones if present (for soap_trigger detector)
+    soap_zones = roi_data.pop("soap_zones", None)
+    if soap_zones is None:
+        single = roi_data.pop("soap_zone", None)
+        if single is not None:
+            soap_zones = [single]
+    else:
+        roi_data.pop("soap_zone", None)
+    roi = roi_data
     
     # Load Ground Truth
     annotations_path = OUTPUTS_DIR / "annotations.json"
@@ -67,19 +81,36 @@ def evaluate_performance(iou_threshold=0.1, detector_name="baseline"):
     
     tp, fp, fn = 0, 0, 0
     iou_scores = []
+    skipped = 0
     
     results_list = []
 
     for clip_path in tqdm(clips, desc="Running detector"):
         name = clip_path.name
-        gt_events = gt_data.get(name, {}).get("events", [])
+        clip_meta = gt_data.get(name, {})
+
+        # Skip excluded clips (e.g. cleaning staff anomalies)
+        if clip_meta.get("exclude", False):
+            skipped += 1
+            continue
+
+        gt_events = clip_meta.get("events", [])
         
         # Run detection
+        extra_kwargs = {}
+        if detector_name == "soap_trigger":
+            if soap_zones is None:
+                print("ERROR: soap_trigger requires 'soap_zones' in roi.json.")
+                print("Run: python src/roi_select.py --soap-zone")
+                return
+            extra_kwargs["soap_zones"] = soap_zones
+
         pred_df = detect_wash_events(
             video_path=str(clip_path),
             roi=roi,
             params=params,
-            show_preview=False
+            show_preview=False,
+            **extra_kwargs,
         )
         pred_events = pred_df.to_dict('records') if not pred_df.empty else []
         
@@ -131,7 +162,9 @@ def evaluate_performance(iou_threshold=0.1, detector_name="baseline"):
     print("\n" + "="*40)
     print(f" EVALUATION SUMMARY ({detector_name})")
     print("="*40)
-    print(f"Total Clips processed : {len(clips)}")
+    print(f"Total Clips processed : {len(clips) - skipped}")
+    if skipped:
+        print(f"Clips excluded        : {skipped}")
     print(f"Ground Truth Events   : {tp + fn}")
     print(f"Detected Events       : {tp + fp}")
     print("-"*40)
@@ -155,7 +188,8 @@ def evaluate_performance(iou_threshold=0.1, detector_name="baseline"):
     # Save summary metrics to JSON for notebook consumption
     summary = {
         "detector": detector_name,
-        "clips_evaluated": len(clips),
+        "clips_evaluated": len(clips) - skipped,
+        "clips_excluded": skipped,
         "precision": round(precision, 4),
         "recall": round(recall, 4),
         "f1_score": round(f1, 4),
@@ -171,9 +205,30 @@ def evaluate_performance(iou_threshold=0.1, detector_name="baseline"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate hand-wash detection.")
-    parser.add_argument("--detector", choices=["baseline", "mediapipe"], default="baseline",
+    parser.add_argument("--detector", choices=["baseline", "mediapipe", "soap_trigger"], default="baseline",
                         help="Which detector to evaluate (default: baseline).")
     parser.add_argument("--iou-threshold", type=float, default=0.1,
                         help="Minimum IoU to count as a match (default: 0.1).")
+    parser.add_argument("--soap-min-contact", type=float, default=None)
+    parser.add_argument("--soap-confirm-window", type=float, default=None)
+    parser.add_argument("--soap-sink-min-y", type=float, default=None)
+    parser.add_argument("--soap-ignore-top", type=float, default=None)
+    parser.add_argument("--soap-min-duration", type=float, default=None)
+    parser.add_argument("--soap-min-sink-time", type=float, default=None)
     args = parser.parse_args()
-    evaluate_performance(iou_threshold=args.iou_threshold, detector_name=args.detector)
+
+    params = DetectionParams()
+    if args.soap_min_contact is not None:
+        params.soap_trigger_min_contact_sec = args.soap_min_contact
+    if args.soap_confirm_window is not None:
+        params.soap_post_trigger_confirm_sec = args.soap_confirm_window
+    if args.soap_sink_min_y is not None:
+        params.soap_sink_min_y_ratio = args.soap_sink_min_y
+    if args.soap_ignore_top is not None:
+        params.soap_motion_ignore_top_ratio = args.soap_ignore_top
+    if args.soap_min_duration is not None:
+        params.soap_min_event_duration_sec = args.soap_min_duration
+    if args.soap_min_sink_time is not None:
+        params.soap_min_sink_time_sec = args.soap_min_sink_time
+
+    evaluate_performance(iou_threshold=args.iou_threshold, detector_name=args.detector, params=params)

@@ -18,7 +18,7 @@ from pathlib import Path
 import cv2
 
 
-def select_roi(video_path: str) -> dict[str, int]:
+def select_roi(video_path: str, prompt: str = "Select ROI (drag rectangle, then press ENTER / SPACE)") -> dict[str, int]:
     """Open first frame and let the user draw a rectangle. Returns dict(x, y, w, h)."""
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -29,8 +29,7 @@ def select_roi(video_path: str) -> dict[str, int]:
     if not ok:
         raise RuntimeError(f"Cannot read first frame: {video_path}")
 
-    window_name = "Select ROI (drag rectangle, then press ENTER / SPACE)"
-    rect = cv2.selectROI(window_name, frame, fromCenter=False, showCrosshair=True)
+    rect = cv2.selectROI(prompt, frame, fromCenter=False, showCrosshair=True)
     cv2.destroyAllWindows()
 
     x, y, w, h = (int(v) for v in rect)
@@ -63,6 +62,8 @@ def _parse_args() -> argparse.Namespace:
                         help="Path to a sample video (default: first clip in data_clips/processed/).")
     parser.add_argument("out_roi_json", nargs="?", default=str(DEFAULT_ROI_PATH),
                         help="Output JSON path (default: outputs/roi.json).")
+    parser.add_argument("--soap-zone", action="store_true",
+                        help="Select soap dispenser zone(s). Repeat selection for each dispenser; press ESC/cancel to finish.")
     return parser.parse_args()
 
 
@@ -76,10 +77,43 @@ def main() -> None:
     print(f"Video : {args.video_path}")
     print(f"Output: {args.out_roi_json}")
 
-    roi = select_roi(args.video_path)
-    save_roi(roi, Path(args.out_roi_json))
+    out_path = Path(args.out_roi_json)
 
-    print(f"ROI saved: {roi}")
+    # Load existing ROI if adding soap zone to existing file
+    if args.soap_zone and out_path.exists():
+        with open(out_path, "r", encoding="utf-8") as f:
+            roi_data = json.load(f)
+        # Remove old soap_zone (single or list) to re-select
+        roi_data.pop("soap_zone", None)
+        roi_data.pop("soap_zones", None)
+        print(f"Existing ROI: x={roi_data['x']}, y={roi_data['y']}, w={roi_data['w']}, h={roi_data['h']}")
+    else:
+        print("Step 1: Select the SINK area (main ROI)")
+        roi_data = select_roi(args.video_path, "Step 1: Select SINK area, then press ENTER")
+        print(f"ROI saved: {roi_data}")
+
+    if args.soap_zone:
+        soap_zones = []
+        i = 1
+        while True:
+            print(f"\nSelect SOAP DISPENSER #{i} (press ESC or draw empty rect to finish)")
+            try:
+                soap = select_roi(args.video_path, f"Select SOAP DISPENSER #{i}, then ENTER (ESC to finish)")
+                soap_zones.append(soap)
+                print(f"  Soap zone #{i}: {soap}")
+                i += 1
+            except RuntimeError:
+                # User cancelled (ESC or empty rect) → done
+                break
+
+        if soap_zones:
+            roi_data["soap_zones"] = soap_zones
+            print(f"\n{len(soap_zones)} soap zone(s) saved.")
+        else:
+            print("\nNo soap zones selected.")
+
+    save_roi(roi_data, out_path)
+    print(f"\nAll saved to: {out_path}")
 
 
 if __name__ == "__main__":

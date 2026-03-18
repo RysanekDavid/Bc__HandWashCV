@@ -40,3 +40,21 @@ class DetectionParams:
 
     median_blur_k: int = 5
     """Kernel size for median-blur denoising of the foreground mask."""
+
+    soap_trigger_min_contact_sec: float = 0.0
+    """Minimum continuous hand-in-soap-zone time required to arm trigger."""
+
+    soap_post_trigger_confirm_sec: float = 0.0
+    """Time window after trigger to confirm sink interaction, otherwise cancel."""
+
+    soap_sink_min_y_ratio: float = 0.35
+    """Only hand points below this relative Y in ROI count as sink interaction."""
+
+    soap_motion_ignore_top_ratio: float = 0.0
+    """Ignore top ROI strip for motion count to reduce mirror/upper-body artifacts."""
+
+    soap_min_event_duration_sec: float = 3.0
+    """Discard detected events shorter than this duration (seconds)."""
+
+    soap_min_sink_time_sec: float = 0.0
+    """Minimum cumulative hand-in-sink time during event. Events with less are discarded."""

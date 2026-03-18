@@ -205,28 +205,35 @@
     "events": []
   },
   "clip_0128.mp4": {
-    "events": []
+    "events": [],
+    "exclude": true
   },
   "clip_0129.mp4": {
-    "events": []
+    "events": [],
+    "exclude": true
   },
   "clip_0130.mp4": {
-    "events": []
+    "events": [],
+    "exclude": true
   },
   "clip_0131.mp4": {
-    "events": []
+    "events": [],
+    "exclude": true
   },
   "clip_0132.mp4": {
     "events": []
   },
   "clip_0133.mp4": {
-    "events": []
+    "events": [],
+    "exclude": true
   },
   "clip_0134.mp4": {
-    "events": []
+    "events": [],
+    "exclude": true
   },
   "clip_0135.mp4": {
-    "events": []
+    "events": [],
+    "exclude": true
   },
   "clip_0136.mp4": {
     "events": []
@@ -253,7 +260,8 @@
     "events": []
   },
   "clip_0144.mp4": {
-    "events": []
+    "events": [],
+    "exclude": true
   },
   "clip_0145.mp4": {
     "events": []

@@ -36,11 +36,14 @@ Následující přehled mapuje technickou realizaci projektu na jednotlivé ofic
   - **Anotační nástroj (`annotate.py`)** pro tvorbu Ground Truth dat (ruční fixace časových oken, kdy probíhá mytí).
   - **Baseline model (`baseline_motion.py`)**, který využívá Background Subtraction (MOG2) a analýzu obrysů (contours) v nastaveném ROI. Tento model tvoří spolehlivý základ díky stabilnímu osvětlení ve sledované zóně.
   - **AI model (`mediapipe_detector.py`)**, který kombinuje MOG2 detekci pohybu s detekcí rukou pomocí Google MediaPipe Hands. Událost je zaznamenána pouze pokud je v ROI detekován pohyb **A ZÁROVEŇ** jsou přítomny ruce — tím se eliminují falešné poplachy.
+  - **Soap Trigger model (`soap_trigger_detector.py`)** — nejúspěšnější přístup. Využívá definované trigger zóny kolem dávkovačů mýdla. Událost začíná, když MediaPipe detekuje ruku v kontaktu s dávkovačem, a končí, když pohyb v ROI klesne. Kombinace domain-specific znalosti s AI detekcí.
 
 ### 4. Zpracování v reálném čase pomocí AI knihoven (Vylepšená AI)
 
 - **Zadání:** Implementovat zpracování obrazových dat v reálném čase s využitím knihoven a nástrojů umělé inteligence.
-- **Stav projektu:** V rámci extenze baseline modelu (a pro zajištění menšího počtu falešně pozitivních detekcí) bude začleněna pokročilá AI vrstva (např. Google MediaPipe Hands). Cílem je spustit logiku _"Zaznamenej událost pouze pokud je v oblasti ROI definován pohyb **A ZÁROVEŇ** jsou detekovány ruce."_ OpenCV i MediaPipe umožňují zpracování blížící se real-time výkonu.
+- **Stav projektu:** V rámci extenze baseline modelu byla začleněna pokročilá AI vrstva Google MediaPipe Hands ve dvou variantách:
+  1. **MediaPipe Hands** — detekce rukou v celém ROI jako filtr falešných poplachů.
+  2. **Soap Trigger** — detekce rukou specificky u dávkovačů mýdla jako přesný trigger začátku události. Tento přístup dosáhl nejlepších výsledků (F1=0.60, Precision=0.63, Mean IoU=0.66).
 
 ### 5. Testování a vyhodnocení (Hodnocení kvality)
 
@@ -56,17 +59,24 @@ Následující přehled mapuje technickou realizaci projektu na jednotlivé ofic
 
 - `data_raw/` - Složka pro původní, dlouhé hrubé videozáznamy z provozu.
 - `data_clips/` - Složka pro vystřihnuté krátké klipy (~20 vteřin) využívané pro anotaci a trénování/testování. Klipy se získávají pomocí FFmpeg.
+- `models/` - Stažené AI modely (MediaPipe HandLandmarker apod.).
+- `notebooks/` - Jupyter notebooky pro analýzu a porovnání výsledků.
+  - `Data_Exploration.ipynb` - Explorace datasetu (distribuce, pokrytí, statistiky GT).
+  - `Detector_Comparison.ipynb` - Porovnání detektorů (grafy, tabulky, F1/IoU analýza).
 - `outputs/` - Složka obsahující výstupy práce:
-  - `roi.json` - Definice regionu zájmu.
+  - `roi.json` - Definice regionu zájmu + soap zones.
   - `annotations.json` - Ground Truth anotace vytvořené uživatelem.
+  - `eval_*.csv` / `eval_*_summary.json` - Výsledky evaluace detektorů.
 - `src/` - Zdrojové kódy:
-  - `roi_select.py` - Nástroj pro manuální výběr a uložení sledované oblasti umyvadla (ROI).
-  - `annotate.py` - Interaktivní uživatelský nástroj pro rychlé označování času událostí ("mytí rukou") v klipech. Modifikováno pro vyrovnání zpoždění zobrazování (real 1x speed playback).
-  - `baseline_motion.py` - Tradiční detekční modul analyzující pohyb v ROI pomocí GMM Background Subtraction.
-  - `mediapipe_detector.py` - AI-enhanced detektor kombinující MOG2 + MediaPipe Hands pro redukci falešných poplachů.
-  - `evaluate.py` - Evaluační skript s metrikami (Precision, Recall, F1, IoU). Podporuje `--detector baseline|mediapipe`.
-  - `batch_run.py` - Nástroj pro dávkové spouštění detekce na všech klipech.
   - `config.py` - Globální definice cest a proměnných.
+  - `roi_select.py` - Nástroj pro manuální výběr ROI a soap zones (`--soap-zone`).
+  - `annotate.py` - Interaktivní anotační nástroj pro tvorbu Ground Truth dat.
+  - `baseline_motion.py` - Detektor #1: MOG2 Background Subtraction + hysteresis.
+  - `mediapipe_detector.py` - Detektor #2: MOG2 + MediaPipe Hands (Tasks API).
+  - `soap_trigger_detector.py` - Detektor #3 (nejlepší): soap zone trigger + motion tracking.
+  - `evaluate.py` - Evaluační skript s metrikami. Podporuje `--detector baseline|mediapipe|soap_trigger`.
+  - `batch_run.py` - Dávkové spouštění detekce na všech klipech.
+  - `debug_viewer.py` - Vizuální diagnostický nástroj pro ladění parametrů detektorů.
 
 ---
 
@@ -112,11 +122,40 @@ Porovnat výkon Baseline vs. AI modelu:
 ```bash
 python src/evaluate.py --detector baseline
 python src/evaluate.py --detector mediapipe
+python src/evaluate.py --detector soap_trigger
 ```
 
-Výsledky se uloží do `outputs/eval_baseline.csv`, `outputs/eval_mediapipe.csv` a příslušných `_summary.json` souborů.
+Výsledky se uloží do `outputs/eval_<detektor>.csv` a `eval_<detektor>_summary.json`.
 
-### 5. Požadavky
+**Aktuální výsledky evaluace (136 klipů, 43 GT událostí):**
+
+| Detektor | Precision | Recall | F1-Score | Mean IoU |
+|---|---|---|---|---|
+| Baseline (MOG2) | 0.5333 | 0.7442 | 0.6214 | 0.3940 |
+| MediaPipe Hands | 0.4444 | 0.6512 | 0.5283 | 0.4009 |
+| **Soap Trigger** | **0.8710** | **0.6279** | **0.7297** | **0.6610** |
+
+### 5. Debug & Ladění parametrů
+
+Pro vizuální diagnostiku a ladění parametrů detektorů slouží `debug_viewer.py`:
+
+```bash
+python src/debug_viewer.py data_clips/2026-02-06/tp00000.pic outputs/roi.json --detector soap_trigger
+```
+
+**Overlays:** ROI box (zelený/červený dle stavu), soap zones (žlutá/cyan), hand landmarks (magenta), motion heatmap.
+
+**Klávesové ovládání:**
+- **SPACE** - Pauza / Play
+- **D / A** - Krok vpřed / vzad
+- **M** - Zapnout/vypnout motion heatmap
+- **H** - Zapnout/vypnout hand landmarks
+- **G** - Zapnout/vypnout ground truth timeline
+- **+/-** - Zvýšit/snížit motion threshold
+- **S** - Uložit aktuální frame
+- **Q** - Ukončit
+
+### 6. Požadavky
 
 ```bash
 pip install -r requirements.txt
