@@ -43,7 +43,7 @@ Následující přehled mapuje technickou realizaci projektu na jednotlivé ofic
 - **Zadání:** Implementovat zpracování obrazových dat v reálném čase s využitím knihoven a nástrojů umělé inteligence.
 - **Stav projektu:** V rámci extenze baseline modelu byla začleněna pokročilá AI vrstva Google MediaPipe Hands ve dvou variantách:
   1. **MediaPipe Hands** — detekce rukou v celém ROI jako filtr falešných poplachů.
-  2. **Soap Trigger** — detekce rukou specificky u dávkovačů mýdla jako přesný trigger začátku události. Tento přístup dosáhl nejlepších výsledků (F1=0.60, Precision=0.63, Mean IoU=0.66).
+  2. **Soap Trigger** — detekce rukou specificky u dávkovačů mýdla jako přesný trigger začátku události. Aktuálně nejlepší přístup (F1=0.73, Precision=0.87, Recall=0.63).
 
 ### 5. Testování a vyhodnocení (Hodnocení kvality)
 
@@ -77,6 +77,7 @@ Následující přehled mapuje technickou realizaci projektu na jednotlivé ofic
   - `evaluate.py` - Evaluační skript s metrikami. Podporuje `--detector baseline|mediapipe|soap_trigger`.
   - `batch_run.py` - Dávkové spouštění detekce na všech klipech.
   - `debug_viewer.py` - Vizuální diagnostický nástroj pro ladění parametrů detektorů.
+  - `tune_diagnose.py` - Diagnostický nástroj pro detailní analýzu state-machine přechodů.
 
 ---
 
@@ -127,13 +128,22 @@ python src/evaluate.py --detector soap_trigger
 
 Výsledky se uloží do `outputs/eval_<detektor>.csv` a `eval_<detektor>_summary.json`.
 
-**Aktuální výsledky evaluace (136 klipů, 43 GT událostí):**
+**Aktuální výsledky evaluace (128 hodnocených klipů, 43 GT událostí):**
 
-| Detektor | Precision | Recall | F1-Score | Mean IoU |
+| Detektor | Precision | Recall | F1-Score | Mean IoU | TP | FP | FN |
+|---|---|---|---|---|---|---|---|
+| Baseline (MOG2) | 0.5333 | 0.7442 | 0.6214 | 0.3940 | 32 | 28 | 11 |
+| MediaPipe Hands | 0.5091 | 0.6512 | 0.5714 | 0.4009 | 28 | 27 | 15 |
+| **Soap Trigger (optimized)** | **0.8710** | **0.6279** | **0.7297** | **0.6614** | **27** | **4** | **16** |
+
+**Evoluce Soap Trigger detektoru:**
+
+| Iterace | Precision | Recall | F1 | Změna |
 |---|---|---|---|---|
-| Baseline (MOG2) | 0.5333 | 0.7442 | 0.6214 | 0.3940 |
-| MediaPipe Hands | 0.4444 | 0.6512 | 0.5283 | 0.4009 |
-| **Soap Trigger** | **0.8710** | **0.6279** | **0.7297** | **0.6610** |
+| Soap Trigger (base) | 0.846 | 0.512 | 0.638 | — |
+| + Temporal smoothing & Event merging | **0.871** | **0.628** | **0.730** | F1 +14% |
+
+> ℹ️ **Poznámka:** Recall 63 % znamená, že systém zachytí přibližně 2 ze 3 skutečných mytí rukou. Pro produkční nasazení compliance monitoringu by bylo nutné dosáhnout Recall ≥ 85 %, což vyžaduje buď rozšíření datasetu, nebo přechod na end-to-end deep learning přístup (např. action recognition). Detailní analýza chyb a ablační studie jsou v [`Detector_Comparison.ipynb`](notebooks/Detector_Comparison.ipynb).
 
 ### 5. Debug & Ladění parametrů
 

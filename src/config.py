@@ -58,3 +58,11 @@ class DetectionParams:
 
     soap_min_sink_time_sec: float = 0.0
     """Minimum cumulative hand-in-sink time during event. Events with less are discarded."""
+
+    hand_detection_grace_sec: float = 1.0
+    """Grace period: consider hand still present for this many seconds after last detection.
+    Compensates for MediaPipe briefly losing track of wet/shiny hands."""
+
+    merge_gap_sec: float = 3.0
+    """Merge two consecutive events if the gap between them is smaller than this.
+    Prevents one wash from splitting into two short (filtered) events."""

@@ -129,6 +129,7 @@ def detect_wash_events(
     min_contact_frames = max(1, int(params.soap_trigger_min_contact_sec * fps))
     confirm_frames = int(params.soap_post_trigger_confirm_sec * fps)
     use_pending_confirmation = confirm_frames > 0
+    grace_frames = int(params.hand_detection_grace_sec * fps)
 
     # State machine
     washing = False
@@ -137,6 +138,7 @@ def detect_wash_events(
     soap_contact_cnt = 0
     pending_cnt = 0
     sink_frames = 0
+    sink_missing_cnt = 0    # grace period counter for sink band
     start_frame: Optional[int] = None
     frame_idx = 0
     events: list[dict] = []
@@ -167,8 +169,17 @@ def detect_wash_events(
         hand_lms = result.hand_landmarks
 
         # Check if hand touches any soap zone
+        # NOTE: NO grace period on soap trigger — must be precise to avoid false triggers.
         hand_at_soap = _hand_in_zone(hand_lms, soap_zones, roi)
-        hand_in_sink = _hand_in_sink_band(hand_lms, roi, params.soap_sink_min_y_ratio)
+
+        # Sink detection WITH grace period — tolerate brief MediaPipe dropouts
+        # during an active wash event (wet/shiny hands lose tracking momentarily).
+        hand_in_sink_raw = _hand_in_sink_band(hand_lms, roi, params.soap_sink_min_y_ratio)
+        if hand_in_sink_raw:
+            sink_missing_cnt = 0
+        else:
+            sink_missing_cnt += 1
+        hand_in_sink = sink_missing_cnt <= grace_frames
 
         # --- State machine ---
 
@@ -246,7 +257,26 @@ def detect_wash_events(
 
     _cleanup(cap, vw, show_preview)
 
-    # Post-filter: apply both duration and sink-time filters together
+    # Post-processing: merge close events, then apply filters
+    merge_gap = params.merge_gap_sec
+    if merge_gap > 0 and len(events) > 1:
+        merged = [events[0]]
+        merged_sink = [sink_frames_per_event[0]]
+        for ev, sf in zip(events[1:], sink_frames_per_event[1:]):
+            prev = merged[-1]
+            gap = ev["start_sec"] - prev["end_sec"]
+            if gap < merge_gap:
+                # Merge: extend previous event
+                prev["end_sec"] = ev["end_sec"]
+                prev["duration_sec"] = round(prev["end_sec"] - prev["start_sec"], 2)
+                merged_sink[-1] += sf
+            else:
+                merged.append(ev)
+                merged_sink.append(sf)
+        events = merged
+        sink_frames_per_event = merged_sink
+
+    # Post-filter: apply both duration and sink-time filters
     min_dur = params.soap_min_event_duration_sec
     min_sink = params.soap_min_sink_time_sec
     if (min_dur > 0 or min_sink > 0) and events:
