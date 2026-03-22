@@ -64,6 +64,8 @@ def _parse_args() -> argparse.Namespace:
                         help="Output JSON path (default: outputs/roi.json).")
     parser.add_argument("--soap-zone", action="store_true",
                         help="Select soap dispenser zone(s). Repeat selection for each dispenser; press ESC/cancel to finish.")
+    parser.add_argument("--sink-zone", action="store_true",
+                        help="Select per-sink zone(s) for multi-station tracking. One zone per sink/umyvadlo.")
     return parser.parse_args()
 
 
@@ -79,13 +81,15 @@ def main() -> None:
 
     out_path = Path(args.out_roi_json)
 
-    # Load existing ROI if adding soap zone to existing file
-    if args.soap_zone and out_path.exists():
+    # Load existing ROI if adding zones to existing file
+    if (args.soap_zone or args.sink_zone) and out_path.exists():
         with open(out_path, "r", encoding="utf-8") as f:
             roi_data = json.load(f)
-        # Remove old soap_zone (single or list) to re-select
-        roi_data.pop("soap_zone", None)
-        roi_data.pop("soap_zones", None)
+        if args.soap_zone:
+            roi_data.pop("soap_zone", None)
+            roi_data.pop("soap_zones", None)
+        if args.sink_zone:
+            roi_data.pop("sink_zones", None)
         print(f"Existing ROI: x={roi_data['x']}, y={roi_data['y']}, w={roi_data['w']}, h={roi_data['h']}")
     else:
         print("Step 1: Select the SINK area (main ROI)")
@@ -111,6 +115,25 @@ def main() -> None:
             print(f"\n{len(soap_zones)} soap zone(s) saved.")
         else:
             print("\nNo soap zones selected.")
+
+    if args.sink_zone:
+        sink_zones = []
+        i = 1
+        while True:
+            print(f"\nSelect SINK ZONE #{i} (area around umyvadlo #{i}, press ESC to finish)")
+            try:
+                sink = select_roi(args.video_path, f"Select SINK ZONE #{i}, then ENTER (ESC to finish)")
+                sink_zones.append(sink)
+                print(f"  Sink zone #{i}: {sink}")
+                i += 1
+            except RuntimeError:
+                break
+
+        if sink_zones:
+            roi_data["sink_zones"] = sink_zones
+            print(f"\n{len(sink_zones)} sink zone(s) saved.")
+        else:
+            print("\nNo sink zones selected.")
 
     save_roi(roi_data, out_path)
     print(f"\nAll saved to: {out_path}")

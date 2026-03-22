@@ -66,3 +66,8 @@ class DetectionParams:
     merge_gap_sec: float = 3.0
     """Merge two consecutive events if the gap between them is smaller than this.
     Prevents one wash from splitting into two short (filtered) events."""
+
+    station_hand_timeout_sec: float = 6.0
+    """Per-station timeout: end event if no hand detected in station's sink zone
+    for this many seconds. Prevents events from hanging when another person's
+    motion keeps the global activity going."""

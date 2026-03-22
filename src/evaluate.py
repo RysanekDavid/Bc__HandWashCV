@@ -61,6 +61,10 @@ def evaluate_performance(iou_threshold=0.1, detector_name="baseline", params=Non
             soap_zones = [single]
     else:
         roi_data.pop("soap_zone", None)
+
+    # Sink zones for per-station tracking
+    sink_zones = roi_data.pop("sink_zones", None)
+
     roi = roi_data
     
     # Load Ground Truth
@@ -104,6 +108,8 @@ def evaluate_performance(iou_threshold=0.1, detector_name="baseline", params=Non
                 print("Run: python src/roi_select.py --soap-zone")
                 return
             extra_kwargs["soap_zones"] = soap_zones
+            if sink_zones is not None:
+                extra_kwargs["sink_zones"] = sink_zones
 
         pred_df = detect_wash_events(
             video_path=str(clip_path),
