@@ -38,7 +38,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
-from config import DetectionParams, OUTPUTS_DIR, PROJECT_ROOT
+from config import DetectionParams, OUTPUTS_DIR, GT_DIR, PROJECT_ROOT
 from roi_select import load_roi
 
 _MODEL_PATH = str(PROJECT_ROOT / "models" / "hand_landmarker.task")
@@ -46,7 +46,7 @@ _MODEL_PATH = str(PROJECT_ROOT / "models" / "hand_landmarker.task")
 
 def _load_gt(video_name: str) -> list[dict]:
     """Load ground truth events for a clip if available."""
-    ann_path = OUTPUTS_DIR / "annotations.json"
+    ann_path = GT_DIR / "annotations.json"
     if not ann_path.exists():
         return []
     with open(ann_path, "r", encoding="utf-8") as f:

@@ -19,7 +19,7 @@ Controls:
     Q           Save and quit
     ESC         Quit without saving
 
-Output:  outputs/full_video_gt.json
+Output:  outputs/ground_truth/full_video_gt.json
 
 Usage:
     python src/annotate_full.py data_clips/2026-02-06/20260127_193759_tp00002.mp4
@@ -35,11 +35,11 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from config import OUTPUTS_DIR, DEFAULT_ROI_PATH
+from config import GT_DIR, DEFAULT_ROI_PATH
 from roi_select import load_roi
 
 
-GT_PATH = OUTPUTS_DIR / "full_video_gt.json"
+GT_PATH = GT_DIR / "full_video_gt.json"
 WINDOW_NAME = "Full Video Annotator  (S=start E=end Q=save+quit)"
 SPEED_OPTIONS = [0.5, 1.0, 2.0, 4.0, 8.0]
 
@@ -206,9 +206,16 @@ def annotate_full(video_path: Path, roi, resume_sec: float = 0.0,
         target_delay = (1000 / fps) / SPEED_OPTIONS[speed_idx]
         elapsed_ms = (time.perf_counter() - t0) * 1000
         wait_ms = max(1, int(target_delay - elapsed_ms))
-        key = cv2.waitKey(wait_ms if not paused else 0) & 0xFF
+        key = cv2.waitKeyEx(wait_ms if not paused else 0)
 
         # ── Keys ──
+        # Windows arrow key codes (waitKeyEx returns full code)
+        KEY_LEFT   = 2424832
+        KEY_RIGHT  = 2555904
+        KEY_UP     = 2490368
+        KEY_DOWN   = 2621440
+        KEY_PGUP   = 2162688
+        KEY_PGDN   = 2228224
 
         if key == 27:  # ESC
             cap.release()
@@ -260,19 +267,19 @@ def annotate_full(video_path: Path, roi, resume_sec: float = 0.0,
             speed_idx = max(speed_idx - 1, 0)
             print(f"  Speed: {SPEED_OPTIONS[speed_idx]}x")
 
-        elif key == 83 or key == ord("l"):  # RIGHT → +5s
+        elif key in (KEY_RIGHT, ord("l")):  # → +5s
             new_f = min(current_frame + int(5 * fps), total_frames - 1)
             cap.set(cv2.CAP_PROP_POS_FRAMES, new_f)
 
-        elif key == 81 or key == ord("h"):  # LEFT → -5s
+        elif key in (KEY_LEFT, ord("h")):  # ← -5s
             new_f = max(current_frame - int(5 * fps), 0)
             cap.set(cv2.CAP_PROP_POS_FRAMES, new_f)
 
-        elif key == 85:  # PAGE UP → +30s
+        elif key in (KEY_PGUP, KEY_UP):  # PgUp / ↑ → +30s
             new_f = min(current_frame + int(30 * fps), total_frames - 1)
             cap.set(cv2.CAP_PROP_POS_FRAMES, new_f)
 
-        elif key == 86:  # PAGE DOWN → -30s
+        elif key in (KEY_PGDN, KEY_DOWN):  # PgDn / ↓ → -30s
             new_f = max(current_frame - int(30 * fps), 0)
             cap.set(cv2.CAP_PROP_POS_FRAMES, new_f)
 

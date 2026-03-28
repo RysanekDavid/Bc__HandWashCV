@@ -2,11 +2,26 @@
 data_raw/
 data_clips/
 
-# Outputs and temporary files
-outputs/*.csv
-outputs/*.json
+# Outputs (all generated artifacts)
+outputs/ground_truth/
+outputs/evaluation/
+outputs/charts/
+outputs/training/
+outputs/debug/
+outputs/detections/
 !outputs/roi.json
-!outputs/annotations.json
+
+# Model weights
+*.pt
+*.task
+!models/hand_landmarker.task
+
+# Datasets
+datasets/
+*.cache
+
+# FFmpeg binary
+ffmpeg-*/
 
 # Python
 __pycache__/

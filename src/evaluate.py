@@ -20,7 +20,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 
-from config import LABELED_DIR, DEFAULT_ROI_PATH, OUTPUTS_DIR, DetectionParams
+from config import LABELED_DIR, DEFAULT_ROI_PATH, OUTPUTS_DIR, GT_DIR, EVAL_DIR, DetectionParams
 from roi_select import load_roi
 
 
@@ -61,14 +61,10 @@ def evaluate_performance(iou_threshold=0.1, detector_name="baseline", params=Non
             soap_zones = [single]
     else:
         roi_data.pop("soap_zone", None)
-
-    # Sink zones for per-station tracking
-    sink_zones = roi_data.pop("sink_zones", None)
-
     roi = roi_data
     
     # Load Ground Truth
-    annotations_path = OUTPUTS_DIR / "annotations.json"
+    annotations_path = GT_DIR / "annotations.json"
     if not annotations_path.exists():
         print(f"ERROR: Annotations not found at {annotations_path}")
         return
@@ -108,8 +104,6 @@ def evaluate_performance(iou_threshold=0.1, detector_name="baseline", params=Non
                 print("Run: python src/roi_select.py --soap-zone")
                 return
             extra_kwargs["soap_zones"] = soap_zones
-            if sink_zones is not None:
-                extra_kwargs["sink_zones"] = sink_zones
 
         pred_df = detect_wash_events(
             video_path=str(clip_path),
@@ -186,7 +180,7 @@ def evaluate_performance(iou_threshold=0.1, detector_name="baseline", params=Non
 
     # Save per-clip results to CSV
     df_results = pd.DataFrame(results_list)
-    csv_path = OUTPUTS_DIR / f"eval_{detector_name}.csv"
+    csv_path = EVAL_DIR / f"eval_{detector_name}.csv"
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     df_results.to_csv(csv_path, index=False, encoding="utf-8")
     print(f"\nPer-clip results saved: {csv_path}")
@@ -202,7 +196,7 @@ def evaluate_performance(iou_threshold=0.1, detector_name="baseline", params=Non
         "mean_iou": round(m_iou, 4),
         "tp": tp, "fp": fp, "fn": fn,
     }
-    summary_path = OUTPUTS_DIR / f"eval_{detector_name}_summary.json"
+    summary_path = EVAL_DIR / f"eval_{detector_name}_summary.json"
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
     print(f"Summary saved        : {summary_path}")

@@ -5,8 +5,6 @@ from pathlib import Path
 # --- Configuration ---
 from config import UNLABELED_DIR, PROJECT_ROOT
 
-RAW_VIDEOS_DIR = PROJECT_ROOT.parent / "data_clips" / "2026-02-06" # Fallback/Check raw path
-# Actually, let's just use the absolute path relative to project for consistency
 RAW_VIDEOS_DIR = PROJECT_ROOT / "data_clips" / "2026-02-06"
 OUTPUT_DIR = UNLABELED_DIR
 CLIP_DURATION = 20  # seconds
@@ -18,7 +16,7 @@ FFPROBE_PATH = PROJECT_ROOT / "ffmpeg-8.0.1-essentials_build" / "bin" / "ffprobe
 # List of (video_name, list_of_start_times_in_seconds)
 # Use None instead of a list to cut the ENTIRE video into segments
 DEFAULT_CLIPS_TO_GENERATE = [
-    ("20260127_155020_tp00001.mp4", None), 
+    ("20260127_193759_tp00002.mp4", None),
 ]
 
 def get_video_duration(video_path):

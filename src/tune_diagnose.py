@@ -29,7 +29,7 @@ import mediapipe as mp
 import numpy as np
 import pandas as pd
 
-from config import DetectionParams, LABELED_DIR, OUTPUTS_DIR, PROJECT_ROOT
+from config import DetectionParams, LABELED_DIR, OUTPUTS_DIR, GT_DIR, EVAL_DIR, PROJECT_ROOT
 from roi_select import load_roi
 
 _MODEL_PATH = str(PROJECT_ROOT / "models" / "hand_landmarker.task")
@@ -484,7 +484,7 @@ def main():
     roi = roi_data
 
     # Load GT
-    annotations_path = OUTPUTS_DIR / "annotations.json"
+    annotations_path = GT_DIR / "annotations.json"
     with open(annotations_path, "r", encoding="utf-8") as f:
         gt_data = json.load(f)
 
@@ -492,7 +492,7 @@ def main():
     clip_names = []
     if args.all_errors:
         # Pick clips from last eval that had any FP or FN
-        eval_csv = OUTPUTS_DIR / "eval_soap_trigger.csv"
+        eval_csv = EVAL_DIR / "eval_soap_trigger.csv"
         if eval_csv.exists():
             df = pd.read_csv(eval_csv)
             for _, row in df.iterrows():

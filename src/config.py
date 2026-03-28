@@ -16,6 +16,15 @@ LABELED_DIR = DATA_CLIPS_DIR / "labeled"
 OUTPUTS_DIR = PROJECT_ROOT / "outputs"
 DEFAULT_ROI_PATH = OUTPUTS_DIR / "roi.json"
 
+# Output subdirectories
+GT_DIR = OUTPUTS_DIR / "ground_truth"
+EVAL_DIR = OUTPUTS_DIR / "evaluation"
+CHARTS_DIR = OUTPUTS_DIR / "charts"
+TRAINING_DIR = OUTPUTS_DIR / "training"
+DEBUG_DIR = OUTPUTS_DIR / "debug"
+DETECTIONS_DIR = OUTPUTS_DIR / "detections"
+MODELS_DIR = PROJECT_ROOT / "models"
+
 
 # ── Detection parameters ──────────────────────────────────────
 
@@ -53,21 +62,8 @@ class DetectionParams:
     soap_motion_ignore_top_ratio: float = 0.0
     """Ignore top ROI strip for motion count to reduce mirror/upper-body artifacts."""
 
-    soap_min_event_duration_sec: float = 3.0
+    soap_min_event_duration_sec: float = 0.0
     """Discard detected events shorter than this duration (seconds)."""
 
     soap_min_sink_time_sec: float = 0.0
     """Minimum cumulative hand-in-sink time during event. Events with less are discarded."""
-
-    hand_detection_grace_sec: float = 1.0
-    """Grace period: consider hand still present for this many seconds after last detection.
-    Compensates for MediaPipe briefly losing track of wet/shiny hands."""
-
-    merge_gap_sec: float = 3.0
-    """Merge two consecutive events if the gap between them is smaller than this.
-    Prevents one wash from splitting into two short (filtered) events."""
-
-    station_hand_timeout_sec: float = 6.0
-    """Per-station timeout: end event if no hand detected in station's sink zone
-    for this many seconds. Prevents events from hanging when another person's
-    motion keeps the global activity going."""
