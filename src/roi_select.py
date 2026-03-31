@@ -29,7 +29,11 @@ def select_roi(video_path: str, prompt: str = "Select ROI (drag rectangle, then 
     if not ok:
         raise RuntimeError(f"Cannot read first frame: {video_path}")
 
-    rect = cv2.selectROI(prompt, frame, fromCenter=False, showCrosshair=True)
+    win = prompt
+    cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(win, 1280, 720)
+    cv2.moveWindow(win, 100, 100)
+    rect = cv2.selectROI(win, frame, fromCenter=False, showCrosshair=True)
     cv2.destroyAllWindows()
 
     x, y, w, h = (int(v) for v in rect)
@@ -66,6 +70,8 @@ def _parse_args() -> argparse.Namespace:
                         help="Select soap dispenser zone(s). Repeat selection for each dispenser; press ESC/cancel to finish.")
     parser.add_argument("--sink-zone", action="store_true",
                         help="Select per-sink zone(s) for multi-station tracking. One zone per sink/umyvadlo.")
+    parser.add_argument("--exit-zone", action="store_true",
+                        help="Select exit zone — area people walk through when leaving the wash area.")
     return parser.parse_args()
 
 
@@ -82,7 +88,7 @@ def main() -> None:
     out_path = Path(args.out_roi_json)
 
     # Load existing ROI if adding zones to existing file
-    if (args.soap_zone or args.sink_zone) and out_path.exists():
+    if (args.soap_zone or args.sink_zone or args.exit_zone) and out_path.exists():
         with open(out_path, "r", encoding="utf-8") as f:
             roi_data = json.load(f)
         if args.soap_zone:
@@ -134,6 +140,17 @@ def main() -> None:
             print(f"\n{len(sink_zones)} sink zone(s) saved.")
         else:
             print("\nNo sink zones selected.")
+
+    if args.exit_zone:
+        roi_data.pop("exit_zone", None)
+        print(f"\nSelect EXIT ZONE — draw a rectangle across the area people walk through when leaving.")
+        print("Make it TALL (~200px) so person feet are reliably detected inside it.")
+        try:
+            exit_z = select_roi(args.video_path, "Select EXIT ZONE, then press ENTER")
+            roi_data["exit_zone"] = exit_z
+            print(f"  Exit zone: {exit_z}")
+        except RuntimeError as e:
+            print(f"No exit zone selected: {e}")
 
     save_roi(roi_data, out_path)
     print(f"\nAll saved to: {out_path}")

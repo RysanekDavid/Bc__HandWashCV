@@ -96,13 +96,39 @@ def compute_stats(events: list[dict], video_duration_sec: float | None = None,
     for sid in unique_stations:
         s_events = [e for e, s in zip(events, stations) if s == sid]
         s_durations = [e["end_sec"] - e["start_sec"] for e in s_events]
+        occupied_sec = sum(s_durations)
+        s_who = sum(1 for d in s_durations if d >= 20)
         station_stats.append({
             "station": sid,
             "event_count": len(s_events),
             "mean_duration_sec": round(sum(s_durations) / len(s_durations), 1),
-            "utilization_pct": round(len(s_events) / total_events * 100, 1),
+            "event_share_pct": round(len(s_events) / total_events * 100, 1),
+            "occupied_sec": round(occupied_sec, 1),
+            "occupied_pct": round(occupied_sec / total_duration * 100, 2),
+            "who_compliant_pct": round(s_who / max(1, len(s_events)) * 100, 1),
         })
     stats["per_station"] = station_stats
+
+    # Simultaneous usage (both stations occupied at the same time)
+    if len(unique_stations) >= 2:
+        sorted_ev = sorted(events, key=lambda e: e["start_sec"])
+        overlap_sec = 0.0
+        overlap_count = 0
+        for i, a in enumerate(sorted_ev):
+            for b in sorted_ev[i + 1:]:
+                if b["start_sec"] >= a["end_sec"]:
+                    break
+                if a.get("station", 0) != b.get("station", 0):
+                    ov_start = max(a["start_sec"], b["start_sec"])
+                    ov_end = min(a["end_sec"], b["end_sec"])
+                    if ov_end > ov_start:
+                        overlap_sec += ov_end - ov_start
+                        overlap_count += 1
+        stats["simultaneous_usage"] = {
+            "overlap_count": overlap_count,
+            "overlap_total_sec": round(overlap_sec, 1),
+            "overlap_pct_of_video": round(overlap_sec / total_duration * 100, 2),
+        }
 
     # Gap analysis
     sorted_events = sorted(events, key=lambda e: e["start_sec"])
@@ -197,8 +223,18 @@ def print_report(stats: dict) -> None:
 
     print(f"\n  Per-Station Breakdown")
     for s in stats["per_station"]:
-        print(f"    Station {s['station']}: {s['event_count']} events, "
-              f"mean {s['mean_duration_sec']}s, {s['utilization_pct']}% of total")
+        print(f"    Station {s['station']}: {s['event_count']} events "
+              f"({s['event_share_pct']}% of total), "
+              f"mean {s['mean_duration_sec']}s")
+        print(f"      Occupied: {s['occupied_sec']}s ({s['occupied_pct']}% of video), "
+              f"WHO compliant: {s['who_compliant_pct']}%")
+
+    if "simultaneous_usage" in stats:
+        su = stats["simultaneous_usage"]
+        print(f"\n  Simultaneous Usage (both stations at once)")
+        print(f"  {'Overlapping events:':<30s} {su['overlap_count']}")
+        print(f"  {'Total overlap time:':<30s} {su['overlap_total_sec']}s")
+        print(f"  {'% of video duration:':<30s} {su['overlap_pct_of_video']}%")
 
     if "gaps" in stats:
         g = stats["gaps"]
@@ -206,6 +242,15 @@ def print_report(stats: dict) -> None:
         print(f"  {'Longest gap:':<30s} {g['longest_gap_sec']}s ({g['longest_gap_sec']/60:.1f} min) "
               f"at {_fmt_sec(g['longest_gap_at_sec'])}")
         print(f"  {'Mean gap between washes:':<30s} {g['mean_gap_sec']}s ({g['mean_gap_sec']/60:.1f} min)")
+
+    if "person_compliance" in stats:
+        c = stats["person_compliance"]
+        print(f"\n  Person Compliance (exit tracking)")
+        print(f"  {'Total person exits:':<30s} {c['total_exits']}")
+        print(f"  {'Washed before exit:':<30s} {c['compliant']}")
+        print(f"  {'Skipped washing:':<30s} {c['non_compliant']}")
+        print(f"  {'Compliance rate:':<30s} {c['compliance_rate_pct']}%")
+        print(f"  {'Exits per hour:':<30s} {c['exits_per_hour']}")
 
     print(f"\n{'=' * 65}")
 
@@ -226,6 +271,8 @@ def main() -> None:
                         help="Video start time for absolute timestamps (e.g. '2026-01-27 23:46:23').")
     parser.add_argument("--video-duration", type=float, default=None,
                         help="Override video duration in seconds.")
+    parser.add_argument("--compliance", default=None,
+                        help="Compliance report JSON (from person_tracker.py) to include in output.")
     args = parser.parse_args()
 
     csv_path = Path(args.csv)
@@ -252,6 +299,16 @@ def main() -> None:
         print(f"GT reference: {gt_count} events")
 
     stats = compute_stats(events, video_duration_sec=video_duration, video_start=video_start)
+
+    # Merge compliance report if provided
+    if args.compliance:
+        comp_path = Path(args.compliance)
+        if comp_path.exists():
+            comp = json.load(open(comp_path, encoding="utf-8"))
+            stats["person_compliance"] = comp["summary"]
+            print(f"Compliance report loaded: {comp['summary']['compliance_rate_pct']}% "
+                  f"({comp['summary']['compliant']}/{comp['summary']['total_exits']} exits)")
+
     print_report(stats)
 
     # Save JSON

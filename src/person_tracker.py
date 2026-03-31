@@ -12,9 +12,12 @@ Use roi_select.py --exit-zone to define it interactively.
 
 Usage:
     python src/person_tracker.py <video> --wash-csv <detections.csv> [--no-preview]
+    python src/person_tracker.py <video> --wash-csv <csv> --save-video    # export demo
+    python src/person_tracker.py <video> --wash-csv <csv> --save-video --no-preview  # headless
 
 Output:
-    outputs/compliance_report.json — per-person wash correlation + aggregate stats
+    outputs/evaluation/compliance_report.json — per-person wash correlation + aggregate stats
+    outputs/demo_tracking.mp4 — annotated demo video (with --save-video)
 """
 
 import argparse
@@ -62,6 +65,12 @@ def bbox_center(box) -> tuple[int, int]:
     return (int((x1 + x2) / 2), int((y1 + y2) / 2))
 
 
+def bbox_bottom_center(box) -> tuple[int, int]:
+    """Bottom-center of bounding box — approximates foot position."""
+    x1, y1, x2, y2 = box
+    return (int((x1 + x2) / 2), int(y2))
+
+
 # ── Wash event correlation ───────────────────────────────────
 
 def find_wash_for_exit(exit_sec: float, wash_events: list[dict],
@@ -84,6 +93,7 @@ def track_persons(
     exit_zone: dict,
     wash_events: list[dict],
     show_preview: bool = True,
+    save_video: str | None = None,
     person_model: str = str(MODELS_DIR / "yolov8n.pt"),
     lookback_sec: float = 60.0,
 ) -> dict:
@@ -108,6 +118,13 @@ def track_persons(
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     print(f"Video: {fps:.0f} fps, {total_frames} frames, {total_frames/fps/60:.1f} min")
+
+    writer = None
+    if save_video:
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        out_fps = fps / 3  # we process every 3rd frame
+        writer = cv2.VideoWriter(save_video, fourcc, out_fps, (width, height))
+        print(f"Saving demo video to: {save_video}")
 
     tracks: dict[int, PersonTrack] = {}
     completed_exits: list[PersonTrack] = []
@@ -160,8 +177,9 @@ def track_persons(
                     is_in = point_in_rect(cx, cy, roi)
                     t.in_zone = is_in
 
-                    # Exit detection: was in ROI zone, now in exit zone
-                    if not t.exited and point_in_rect(cx, cy, exit_zone):
+                    # Exit detection: foot position enters exit zone
+                    bx, by = bbox_bottom_center(box)
+                    if not t.exited and point_in_rect(bx, by, exit_zone):
                         t.exited = True
                         t.exit_sec = current_sec
 
@@ -179,13 +197,16 @@ def track_persons(
                         print(f"  EXIT #{len(completed_exits)}: Person {tid} at "
                               f"{current_sec:.1f}s — {status}{wash_info}")
 
-            # Draw preview
-            if show_preview:
+            # Draw overlays for preview and/or video export
+            if show_preview or writer:
                 _draw_tracking(frame, results, roi, exit_zone, tracks,
                                completed_exits, current_sec)
-                cv2.imshow("Person Tracker + Compliance", frame)
-                if cv2.waitKey(1) & 0xFF == 27:
-                    break
+                if writer:
+                    writer.write(frame)
+                if show_preview:
+                    cv2.imshow("Person Tracker + Compliance", frame)
+                    if cv2.waitKey(1) & 0xFF == 27:
+                        break
 
         frame_idx += 1
         if frame_idx % report_interval == 0:
@@ -193,6 +214,9 @@ def track_persons(
                   f"exits: {len(completed_exits)}")
 
     cap.release()
+    if writer:
+        writer.release()
+        print(f"Demo video saved: {save_video}")
     if show_preview:
         cv2.destroyAllWindows()
 
@@ -303,7 +327,10 @@ def main() -> None:
                         help="YOLO detection model for persons (default: models/yolov8n.pt).")
     parser.add_argument("--lookback", type=float, default=60.0,
                         help="Seconds to look back for wash event before exit (default: 60).")
-    parser.add_argument("--no-preview", action="store_true")
+    parser.add_argument("--no-preview", action="store_true",
+                        help="Run headless without display window.")
+    parser.add_argument("--save-video", action="store_true",
+                        help="Export annotated demo video to outputs/demo_tracking.mp4.")
     args = parser.parse_args()
 
     video_path = Path(args.video)
@@ -346,10 +373,13 @@ def main() -> None:
     roi_data.pop("exit_zone", None)
     roi = roi_data
 
+    save_path = str(OUTPUTS_DIR / "demo_tracking.mp4") if args.save_video else None
+
     print(f"\nStarting person tracking + compliance analysis...")
     report = track_persons(
         str(video_path), roi, exit_zone, wash_events,
         show_preview=not args.no_preview,
+        save_video=save_path,
         person_model=args.person_model,
         lookback_sec=args.lookback,
     )
@@ -380,8 +410,15 @@ def main() -> None:
             print(f"    ID {p['track_id']:>4d} exit@{p['exit_sec']:>7.1f}s — {status}{detail}")
 
     # Save report
+    def _default(obj):
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
     out_path = EVAL_DIR / "compliance_report.json"
-    out_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    out_path.write_text(json.dumps(report, indent=2, ensure_ascii=False, default=_default), encoding="utf-8")
     print(f"\nReport saved: {out_path}")
 
 
