@@ -67,3 +67,9 @@ class DetectionParams:
 
     soap_min_sink_time_sec: float = 0.0
     """Minimum cumulative hand-in-sink time during event. Events with less are discarded."""
+
+    hand_detection_grace_sec: float = 1.0
+    """Keep wash event alive for this long after hands disappear (handles detection drops)."""
+
+    merge_gap_sec: float = 3.0
+    """Merge two events separated by less than this gap into one (prevents split detections)."""
