@@ -69,7 +69,7 @@ def run_soap_trigger(video_path: str, roi: dict, soap_zones: list,
     params = DetectionParams()
     df = soap_detect(
         video_path, roi, soap_zones, params,
-        show_preview=False, sink_zones=sink_zones,
+        show_preview=False,
     )
     if hasattr(df, "to_dict"):
         return df.to_dict("records")
@@ -106,7 +106,7 @@ def fmt_time(sec: float) -> str:
 def print_table(results: list[dict], gt_count: int) -> None:
     """Print a formatted comparison table."""
     header = (
-        f"{'Detector':<28s} {'TP':>4s} {'FP':>4s} {'FN':>4s} {'Spl':>4s} "
+        f"{'Detector':<28s} {'TP':>4s} {'FP':>4s} {'FN':>4s} "
         f"{'Prec':>7s} {'Recall':>7s} {'F1':>7s} {'IoU':>7s} {'Time':>8s}"
     )
     print(f"\n{'=' * len(header)}")
@@ -117,7 +117,7 @@ def print_table(results: list[dict], gt_count: int) -> None:
 
     for r in results:
         print(
-            f"{r['name']:<28s} {r['tp']:>4d} {r['fp']:>4d} {r['fn']:>4d} {r['splits']:>4d} "
+            f"{r['name']:<28s} {r['tp']:>4d} {r['fp']:>4d} {r['fn']:>4d} "
             f"{r['precision']:>7.4f} {r['recall']:>7.4f} {r['f1']:>7.4f} "
             f"{r['mean_iou']:>7.4f} {r['runtime_sec']:>7.1f}s"
         )
@@ -126,7 +126,6 @@ def print_table(results: list[dict], gt_count: int) -> None:
 
     best = max(results, key=lambda r: r["f1"])
     print(f"\n  Best F1: {best['name']} ({best['f1']:.4f})")
-    print(f"  (Spl = split detections: one GT event fragmented into multiple dets, not counted as FP)")
 
 
 def print_detail(name: str, det_events: list, gt_events: list,
@@ -135,14 +134,15 @@ def print_detail(name: str, det_events: list, gt_events: list,
     print(f"\n--- {name} ({len(det_events)} detections) ---")
 
     if match_result["matches"]:
-        print(f"  MATCHED (TP={match_result['tp']}, splits={match_result['splits']}):")
+        print(f"  MATCHED (TP={match_result['tp']}):")
         for m in match_result["matches"]:
+            if m.get("split"):
+                continue
             g = gt_events[m["gt_idx"]]
             d = det_events[m["det_idx"]]
-            tag = " [split]" if m.get("split") else ""
             print(f"    Det {fmt_time(d['start_sec'])}-{fmt_time(d['end_sec'])} "
                   f"<-> GT {fmt_time(g['start_sec'])}-{fmt_time(g['end_sec'])}  "
-                  f"IoU={m['iou']:.2f}{tag}")
+                  f"IoU={m['iou']:.2f}")
 
     if match_result["unmatched_det"]:
         print(f"  FALSE POSITIVES ({match_result['fp']}):")
@@ -237,7 +237,6 @@ def run_comparison(video_path: str, gt_path: str, roi_path: str,
             "tp": match_result["tp"],
             "fp": match_result["fp"],
             "fn": match_result["fn"],
-            "splits": match_result["splits"],
             "precision": match_result["precision"],
             "recall": match_result["recall"],
             "f1": match_result["f1"],

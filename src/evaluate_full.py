@@ -163,7 +163,7 @@ def main():
     print(f"{'='*60}")
     print(f"  GT events:       {len(gt_events)}")
     print(f"  Detected events: {len(det_list)}")
-    print(f"  TP: {results['tp']}  FP: {results['fp']}  FN: {results['fn']}  Splits: {results['splits']}")
+    print(f"  TP: {results['tp']}  FP: {results['fp']}  FN: {results['fn']}")
     print(f"  Precision: {results['precision']:.4f}")
     print(f"  Recall:    {results['recall']:.4f}")
     print(f"  F1-Score:  {results['f1']:.4f}")
@@ -172,14 +172,15 @@ def main():
 
     # Matched pairs
     if results["matches"]:
-        print(f"\n  MATCHED (TP={results['tp']}, splits={results['splits']}):")
+        print(f"\n  MATCHED (TP={results['tp']}):")
         for m in results["matches"]:
+            if m.get("split"):
+                continue
             g = gt_events[m["gt_idx"]]
             d = det_list[m["det_idx"]]
-            tag = " [split]" if m.get("split") else ""
             print(f"    Det {fmt(d['start_sec'])}-{fmt(d['end_sec'])} "
                   f"<-> GT {fmt(g['start_sec'])}-{fmt(g['end_sec'])}  "
-                  f"IoU={m['iou']:.2f}{tag}")
+                  f"IoU={m['iou']:.2f}")
 
     # False Positives
     if results["unmatched_det"]:
