@@ -9,6 +9,7 @@ outputs/charts/
 outputs/training/
 outputs/debug/
 outputs/detections/
+outputs/*.mp4
 !outputs/roi.json
 
 # Model weights
